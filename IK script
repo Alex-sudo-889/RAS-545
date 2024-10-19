@@ -1,0 +1,128 @@
+sim = require 'sim'
+simIK = require 'simIK'
+
+function sysCall_init()
+    self = sim.getObject '.'
+
+    simBase = sim.getObject ':'
+    simTip = sim.getObject ':/tool0_visual'
+    simTarget = sim.getObject ':/Dummy'
+
+    enabled = true
+    handleWhenSimulationRunning = true
+    handleWhenSimulationStopped = true
+    dampingFactor = 0.100000
+    maxIterations = 10
+    if dampingFactor > 0 then
+        method = simIK.method_damped_least_squares
+    else
+        method = simIK.method_pseudo_inverse
+    end
+    constraint = simIK.constraint_pose
+    ikOptions = {
+        syncWorlds = true,
+        allowError = true,
+    }
+    ikEnv = simIK.createEnvironment()
+    ikGroup = simIK.createGroup(ikEnv)
+    simIK.setGroupCalculation(ikEnv, ikGroup, method, dampingFactor, maxIterations)
+    _, ikHandleMap, simHandleMap = simIK.addElementFromScene(ikEnv, ikGroup, simBase, simTip, simTarget, constraint)
+
+    if jointGroup then
+        -- disable joints not part of the joint group
+        ikJoints = {}
+        for i, ikJoint in ipairs(simIK.getGroupJoints(ikEnv, ikGroup)) do
+            if table.find(simJoints, simHandleMap[ikJoint]) then
+                table.insert(ikJoints, ikJoint)
+            else
+                simIK.setJointMode(ikEnv, ikJoint, simIK.jointmode_passive)
+            end
+        end
+    else
+        ikJoints = simIK.getGroupJoints(ikEnv, ikGroup)
+    end
+end
+
+function sysCall_actuation()
+    if enabled and handleWhenSimulationRunning then handleIk() end
+end
+
+function sysCall_nonSimulation()
+    if enabled and handleWhenSimulationStopped then handleIk() end
+end
+
+function sysCall_cleanup()
+    simIK.eraseEnvironment(ikEnv)
+end
+
+function handleIk()
+    local result, failureReason = simIK.handleGroup(ikEnv, ikGroup, ikOptions)
+end
+
+function getEnvironment()
+    return ikEnv
+end
+
+function getGroup()
+    return ikGroup
+end
+
+function getElement()
+    return ikElement
+end
+
+function getBase()
+    return simBase
+end
+
+function getTip()
+    return simTip
+end
+
+function getTarget()
+    return simTarget
+end
+
+function getIkJoints()
+    return ikJoints
+end
+
+function getIkConfig()
+    return map(partial(simIK.getJointPosition, ikEnv), getIkJoints())
+end
+
+function setIkConfig(cfg)
+    foreach(partial(simIK.setJointPosition, ikEnv), getIkJoints(), cfg)
+end
+
+function getEnabled()
+    return enabled
+end
+
+function setEnabled(b)
+    enabled = not not b
+end
+
+function getHandleWhenSimulationRunning()
+    return handleWhenSimulationRunning
+end
+
+function setHandleWhenSimulationRunning(b)
+    handleWhenSimulationRunning = not not b
+end
+
+function getHandleWhenSimulationStopped()
+    return handleWhenSimulationStopped
+end
+
+function setHandleWhenSimulationStopped(b)
+    handleWhenSimulationStopped = not not b
+end
+
+function mapToIk(simHandle)
+    return ikHandleMap[simHandle]
+end
+
+function mapToSim(ikHandle)
+    return simHandleMap[ikHandle]
+end
